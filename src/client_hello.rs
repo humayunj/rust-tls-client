@@ -1,7 +1,3 @@
-use std::alloc::System;
-
-use crypto::digest::Digest;
-
 use crate::{
     buffer::{Buffer, Error},
     format::{Extention, parse_extentions},
@@ -142,10 +138,15 @@ impl TryFrom<&Record> for ClientHello {
 #[cfg(test)]
 mod tests {
 
+    use crypto::aead::AeadDecryptor;
+
     use crate::buffer::Buffer;
     use crate::client_hello::ClientHello;
     use crate::format::KeyShareExtention;
-    use crate::mockdata;
+    use crate::keypair::KeyPair;
+    use crate::mockdata::{self, MOCK_ENCRYPTED_EXTENTIONS_RECORD, MOCK_SERVER_RECORD};
+    use crate::record::Record;
+    use crate::utils::gen_session_keys;
     use crate::*;
 
     #[test]
@@ -192,5 +193,75 @@ mod tests {
                     .unwrap()
             )
         )
+    }
+
+    #[test]
+    fn test_decrypt() {
+        let secret: [u8; 32] =
+            hex::decode("202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f")
+                .unwrap()[..]
+                .try_into()
+                .unwrap();
+
+        let server_public_key: [u8; 32] =
+            hex::decode("9fd7ad6dcff4298dd3f96d5b1b2af910a0535b1488d7f8fabb349a982880b615")
+                .unwrap()[..]
+                .try_into()
+                .unwrap();
+
+        let kp = KeyPair::from(secret);
+
+        let mock_client_hello = hex::decode(mockdata::MOCK_CLIENT_RECORD).unwrap();
+        let mock_server_hello = hex::decode(mockdata::MOCK_SERVER_RECORD).unwrap();
+
+        let server_handshake = &mock_server_hello[5..];
+        let client_handshake = &mock_client_hello[5..];
+
+        let keys = gen_session_keys(
+            &kp.private_key,
+            &server_public_key,
+            &client_handshake,
+            &server_handshake,
+        )
+        .unwrap();
+
+        assert_eq!(
+            hex::decode("9f13575ce3f8cfc1df64a77ceaffe89700b492ad31b4fab01c4792be1b266b7f")
+                .unwrap(),
+            keys.server_handshake_key
+        );
+        assert_eq!(
+            hex::decode("9563bc8b590f671f488d2da3").unwrap(),
+            keys.server_handshake_iv
+        );
+
+        let vec = hex::decode(MOCK_ENCRYPTED_EXTENTIONS_RECORD).unwrap();
+        let record = Record::try_from(&mut Buffer::from(&vec)).unwrap();
+
+        assert_eq!(record.record_type, 0x17); //application data
+
+        let recdata = hex::decode("1703030017").unwrap();
+        let encryped_data = hex::decode("6be02f9da7c2dc").unwrap();
+
+        let authtag = hex::decode("9ddef56f2468b90adfa25101ab0344ae").unwrap();
+
+        let mut payload = vec![];
+
+        payload.extend_from_slice(&recdata[..]);
+        payload.extend_from_slice(&encryped_data[..]);
+        payload.extend_from_slice(&authtag[..]);
+
+        let mut aes = crypto::aes_gcm::AesGcm::new(
+            crypto::aes::KeySize::KeySize256,
+            &keys.server_handshake_key[..],
+            &keys.server_handshake_iv,
+            &recdata,
+        );
+
+        let out = &mut [0u8; 7];
+        let r = aes.decrypt(&encryped_data, &mut out.as_mut_slice(), &authtag[..]);
+        assert_eq!(r, true);
+
+        assert_eq!(out, &hex::decode("08000002000016").unwrap()[..]);
     }
 }

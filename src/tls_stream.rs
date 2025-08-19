@@ -75,20 +75,9 @@ impl TlsStream {
 
         let rec = Record::new(0x16, hs.vec); // handshake
 
-        println!(
-            "Client Record: {}",
-            hex::encode(Buffer::from(&rec).as_bytes())
-        );
-
         stream.send_record(&rec)?;
-        println!("RECV...");
 
         let server_hello_b = stream.read_record()?;
-
-        println!(
-            "Server Hello B: {}",
-            hex::encode(Buffer::from(&server_hello_b).as_bytes())
-        );
 
         let server_hello = ServerHello::try_from(&server_hello_b)?;
         let server_public_key = server_hello.extract_shared_key().unwrap();
@@ -99,8 +88,8 @@ impl TlsStream {
         if let Ok(keys) = gen_session_keys(
             &stream.session.keypair.private_key,
             &stream.session.server_pubkey,
-            &client_hs,
-            &server_hs,
+            Buffer::from(&client_hs).as_bytes(),
+            Buffer::from(&server_hs).as_bytes(),
         ) {
             stream.session.keys = keys;
         } else {
@@ -109,6 +98,13 @@ impl TlsStream {
         stream.session.server_handshake = Some(server_hs);
 
         println!("Keys: {}", &stream.session.keys);
+
+        // receive change cipher
+
+        let change_cipher_block = stream.read_record()?;
+
+        println!("{}", change_cipher_block);
+
         Ok(stream)
     }
 
@@ -158,11 +154,6 @@ impl TlsStream {
             .seek(3)?
             .read_u16()?;
 
-        println!(
-            "RECV HEADER: {} SIZE: {}",
-            hex::encode(record_header),
-            record_size
-        );
         let mut content: Vec<u8> = vec![];
         content.resize(record_size as usize, 0); // zeroes
         self.tcp.read_exact(&mut content[..])?;

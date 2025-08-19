@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use crate::buffer::{Buffer, Error};
 
 pub struct Record {
@@ -12,6 +14,24 @@ impl Record {
             ver: 0x301,
             content,
         }
+    }
+}
+impl Display for Record {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(
+            f,
+            "Record<type = {} size={}> {}..{}",
+            hex::encode(self.record_type.to_be_bytes()),
+            hex::encode((self.content.len() as u16).to_be_bytes()),
+            hex::encode(&self.content[..std::cmp::min(self.content.len(), 2)]),
+            hex::encode(
+                &self.content[self
+                    .content
+                    .len()
+                    .checked_sub(2)
+                    .unwrap_or(self.content.len())..]
+            )
+        )
     }
 }
 

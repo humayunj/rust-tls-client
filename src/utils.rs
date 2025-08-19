@@ -57,14 +57,14 @@ pub fn hkdf_derive_secret(
 pub fn gen_session_keys(
     client_privkey: &[u8; 32],
     server_pubkey: &[u8; 32],
-    client_handshake: &Handshake,
-    server_handshake: &Handshake,
+    client_handshake_bytes: &[u8],
+    server_handshake_bytes: &[u8],
 ) -> Result<SessionKeys, Error> {
     let shared_secret = curve25519::curve25519(client_privkey, server_pubkey);
 
     let hello_hash = sha384(&concat_bytes_array(
-        Buffer::from(client_handshake).as_bytes(),
-        Buffer::from(server_handshake).as_bytes(),
+        client_handshake_bytes,
+        server_handshake_bytes,
     ));
 
     let (early_secret, _) = Hkdf::<Sha384>::extract(Some(&[0u8; 48]), &[0u8; 48]);
