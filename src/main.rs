@@ -24,7 +24,7 @@ mod utils;
 mod tls_stream;
 
 fn main() {
-    let stream = TlsStream::connect("localhost".into(), "localhost:5252").unwrap();
+    let stream = TlsStream::connect("humayun.io".into(), "humayun.io:443").unwrap();
 
     println!("\nTERMINATED")
 }

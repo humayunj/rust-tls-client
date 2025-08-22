@@ -15,6 +15,12 @@ impl Handshake {
         let b: Buffer = self.into();
         sha2::Sha256::digest(b.as_bytes()).into()
     }
+    pub fn new(hs_type: u8, content: Buffer) -> Self {
+        Handshake {
+            handshake_type: hs_type,
+            content: content,
+        }
+    }
 }
 impl TryFrom<&mut Buffer> for Handshake {
     type Error = Error;

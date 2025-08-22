@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use sha2::Digest;
+
 use crate::buffer::{Buffer, Error};
 
 pub struct Record {
@@ -11,8 +13,18 @@ impl Record {
     pub fn new(rtype: u8, content: Vec<u8>) -> Record {
         Record {
             record_type: rtype,
-            ver: 0x301,
+            ver: 0x303,
             content,
+        }
+    }
+
+    fn get_type_name(&self) -> String {
+        match self.record_type {
+            0x14 => "ChangeCipherSpec".to_string(),
+            0x16 => "Handshake".to_string(),
+
+            0x17 => "ApplicationData".to_string(),
+            _ => hex::encode(self.record_type.to_be_bytes()),
         }
     }
 }
@@ -20,8 +32,8 @@ impl Display for Record {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         writeln!(
             f,
-            "Record<type = {} size={}> {}..{}",
-            hex::encode(self.record_type.to_be_bytes()),
+            "Record<type={}  size={}> {}..{}",
+            self.get_type_name(),
             hex::encode((self.content.len() as u16).to_be_bytes()),
             hex::encode(&self.content[..std::cmp::min(self.content.len(), 2)]),
             hex::encode(
@@ -70,7 +82,15 @@ impl From<&Record> for Buffer {
         b
     }
 }
+impl TryFrom<&Vec<u8>> for Record {
+    type Error = Error;
+    fn try_from(value: &Vec<u8>) -> Result<Self, Self::Error> {
+        let mut b = Buffer::from(value);
+        let r: Record = Self::try_from(&mut b)?;
 
+        Ok(r)
+    }
+}
 #[cfg(test)]
 mod tests {
     use sha2::Digest;
