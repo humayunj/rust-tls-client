@@ -29,6 +29,7 @@ use sha2::{Digest, Sha384};
 pub struct TlsStream {
     session: Session,
     tcp: TcpStream,
+    app_data: Vec<u8>,
 }
 
 pub enum KeysState {
@@ -49,7 +50,7 @@ struct Session {
 }
 
 impl TlsStream {
-    pub fn connect(hostname: String, addr: impl ToSocketAddrs) -> Result<TlsStream, Error> {
+    pub fn connect(hostname: &String, addr: impl ToSocketAddrs) -> Result<TlsStream, Error> {
         let tcp_stream = TcpStream::connect(addr).unwrap();
 
         let mut secret: [u8; 32] = [0u8; 32];
@@ -73,6 +74,7 @@ impl TlsStream {
         let mut stream = TlsStream {
             session: session,
             tcp: tcp_stream,
+            app_data: vec![],
         };
 
         let mut client_hello = ClientHello::new();
@@ -230,27 +232,24 @@ impl TlsStream {
         // println!("ticket 2 {}", ticket_2);
 
         // send HTTP
-        let http_msg = format!("GET / HTTP/1.1\r\nHost: {}\r\n\r\n", hostname);
-        println!("Encoded Request:\n\n{}", &http_msg);
-
-        // send message
-        let request = Record::new(0x17, http_msg.as_bytes().into());
-
-        stream.wrap_send_handshake_record(&request).unwrap();
-
-        // wait for reply
-
-        let mut r: Record;
-        loop {
-            r = stream.read_record()?;
-            if r.record_type == 0x17 {
-                println!("\nRCV RESPONCE <len={}>\n===========", r.content.len());
-
-                println!("{}", String::from_utf8_lossy(&r.content[..]));
-            }
-        }
 
         Ok(stream)
+    }
+    pub fn receive_data(&mut self) -> Result<Vec<u8>, Error> {
+        loop {
+            let r = self.read_record()?;
+            if r.record_type == 0x17 {
+                return Ok(r.content);
+            }
+        }
+    }
+
+    pub fn send_data(&mut self, data: &[u8]) -> Result<(), Error> {
+        let request = Record::new(0x17, Vec::from(data));
+
+        self.wrap_send_handshake_record(&request)?;
+
+        Ok(())
     }
 
     fn build_extentions(&mut self) -> Vec<Extention> {
